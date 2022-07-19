@@ -1,0 +1,188 @@
+### version 0.1.1
+###
+# my sample code for HR
+# complete mission is full cicd on gitlab 
+# check, build, test, deploy, test, clean 
+# cv https://hh.ru/resume/b48c8349ff07b118c80039ed1f66486c315670
+###
+
+### variables used in project
+### can be used from $file, but just for demo let me show u
+variables:
+   dockerfilename: "Dockerfile"
+   name: "template"
+   username: "${CICD-user}"
+   docker_network: "template-net"
+   log_server: "${LOG_HOST_URL}:24224"
+   port_public: 80
+   port_internal: 80
+   docker_registry_https: "${DOCKER_HOST_URL}:5001"
+   sonar_host_url: "${SONAR_HOST_URL}"
+   sonar_token: "${SONAR_TOKEN}"
+
+
+### workflow switching on branch
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "feature"'
+      variables:
+         target_server: "feature_server"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+         target_server: "dev_server"
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+         target_server: "prod_server"
+    - when: always
+
+
+### full cicd stages
+stages:
+  - test_Dockerfile
+  - sonarqube_check
+  - git_clone_endpoints
+  - build
+  - push
+  - scan_image
+  - deploy
+  - loadtest
+  - clean
+
+
+### gitlab runner 
+image: ${docker_registry_https}/docker:20.10.12
+services:
+  - ${docker_registry_https}/docker:20.10.12-dind-alpine3.15
+
+
+### check Dockerfile via hadolint not sonar due resource economy
+.test_hadolint: &test_hadolint
+  script:
+    - make test_hadolint
+
+test1:
+  <<: *test_hadolint
+  stage: test_Dockerfile
+  only:
+    refs:
+      - feature
+      - dev
+      - main
+    changes:
+      - $dockerfilename
+
+
+### check quality code on sonar. activate it via adding "sonar-test" in commit message
+sonarqube_check:
+  stage: sonarqube_check
+  script:
+      - make sonar_check
+  after_script:
+      - make sonar_clean
+  only:
+    refs:
+      - feature
+      - dev
+      - main
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /sonar-test/
+
+
+### get endpoints from endpoints project. artifacts lifetime 10 min
+.git_clone_endpoints:  &git_clone_endpoints
+  script:
+     - make git_clone_endpoints
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
+    paths:
+      - endpoints/
+    expire_in:  10 min
+
+git_clone_endpoints:
+  <<: *git_clone_endpoints
+  stage: git_clone_endpoints
+  only:
+    - feature
+    - static
+    - main
+
+
+### build docker image
+.build: &build
+  script:
+    - make build
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
+    expire_in: 10 min
+    reports:
+      dotenv: .env
+  dependencies:
+    - git_clone_endpoints
+
+build_image:
+  <<: *build
+  stage: build
+  only:
+    - feature
+    - static
+    - main
+
+
+ ### push docker image on nexus docker repo   
+.push: &push
+  script:
+      - make push
+
+push_image:
+  <<: *push
+  stage: push
+  only:
+    - feature
+    - static
+    - main
+
+
+### logon script
+.login: &login
+   script:
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+
+
+### deploy app on target server
+.deploy: &deploy
+  <<: *login
+  script:
+    - make deploy
+
+deploy_root:
+  <<: *deploy
+  stage: deploy
+  only:
+    - feature
+    - static
+    - main
+
+
+### include load tests from grafana-k6 project && security scan image from aquasec trivy&anchor grype projects
+include:
+  - project: 'tests/first_tests'
+    ref: feature
+    file:
+      - k6-load.yml
+      - scan_image.yml
+
+
+### just clean 
+cleanup:
+  stage: clean
+  script:
+    - make clean
+  only:
+    - feature
+    - static
+    - main
+
+### 

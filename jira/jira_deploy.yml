@@ -1,0 +1,7 @@
+---
+- hosts: "{{ variable_host | default('jira') }}"
+  user: "{{ variable_user | default('infrauser') }}"
+  become: true
+  roles:
+    - jira_deploy
+  # when: ansible_distribution == "Ubuntu"

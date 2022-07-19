@@ -1,0 +1,36 @@
+---
+# tasks file for jira_deploy
+    
+- name: Create a network
+  community.docker.docker_network:
+      name: "{{ docker_network_name }}"
+
+
+- name: Create a shared folder for jira
+  file:
+      path: /usr/share/{{ item }}
+      state: directory
+      owner: docker
+      group: docker
+      mode: '0644' # поменять на требования
+  with_items: "{{ jira_shared_directory }}"
+
+
+- name: UP jira container
+  docker_container:
+      name: jira
+      image: "{{ docker_registry }}/atlassian/jira-software:{{ jira_version }}"
+      restart_policy: always
+      state: started
+      ports:
+        - 8080:8080
+      volumes:
+        - jira-data:/var/atlassian/application-data/jira
+        - /etc/jira/conf/:/opt/atlassian/jira/conf
+      networks:
+        - name: "{{ docker_network_name }}"
+      # env:
+      #   ATL_PROXY_NAME="{{ atl_proxy_name }}"
+      #   ATL_PROXY_PORT="{{ atl_proxy_port }}"
+      #   ATL_TOMCAT_SCHEME="{{ atl_tomcat_scheme }}"
+      #   ATL_TOMCAT_SECURE="{{ atl_tomcat_secure }}"

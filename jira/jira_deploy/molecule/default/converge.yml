@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include jira_deploy"
+      include_role:
+        name: "jira_deploy"

@@ -1,0 +1,11 @@
+---
+# vars file for jira_deploy
+
+jira_version: '8.22.1'
+jira_shared_directory: jira-data
+docker_network_name: jira-net
+docker_registry: nexus.company.off:5000
+atl_proxy_name: "{{ variable_atl_proxy_name | default('jira.company.off') }}"
+atl_proxy_port: "{{ variable_atl_proxy_port | default('443') }}"
+atl_tomcat_scheme: "{{ variable_atl_tomcat_scheme | default('https') }}"
+atl_tomcat_secure: "{{ variable_atl_tomcat_secure | default('true') }}"
